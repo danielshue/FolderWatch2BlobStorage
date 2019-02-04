@@ -3,3 +3,8 @@
 ################################################################################
 
 /src/.vs/FolderWatch2BlobStorage/v16/.suo
+/src/FolderWatch2BlobStorage/bin/Debug/netcoreapp2.1
+/src/FolderWatch2BlobStorage.Tests/obj/Debug/netcoreapp2.1
+/src/FolderWatch2BlobStorage.Tests/bin/Debug/netcoreapp2.1
+/src/FolderWatch2BlobStorage/obj
+/src/FolderWatch2BlobStorage.Tests/obj
