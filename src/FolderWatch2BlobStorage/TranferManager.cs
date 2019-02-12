@@ -250,7 +250,6 @@ namespace FolderWatch2BlobStorage
                 catch { }
             }
         }
-
         private CloudBlobClient CreateBlobClient(string accountName, string accountKey)
         {
             string connectionString = $"DefaultEndpointsProtocol=https;AccountName={accountName};AccountKey={accountKey}";

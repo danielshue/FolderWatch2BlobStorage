@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using McMaster.Extensions.CommandLineUtils;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -64,7 +65,12 @@ namespace FolderWatch2BlobStorage
             .AddSingleton<IConsole>(PhysicalConsole.Singleton)
             .BuildServiceProvider();
 
-            _logger = services.GetService<ILogger<TransferToStorage>>();
+            //configure console log
+            services
+                .GetService<ILoggerFactory>()
+                .AddConsole(Microsoft.Extensions.Logging.LogLevel.Debug);
+
+            _logger = services.GetService<ILoggerFactory>().CreateLogger<TransferToStorage>();
 
             Console.CancelKeyPress += (sender, eventArgs) =>
             {
@@ -113,9 +119,14 @@ namespace FolderWatch2BlobStorage
 
             _logger.LogInformation($"Elapsed time \t{ timer.Elapsed.TotalSeconds } seconds");
 
+            if(_transferManger is IDisposable)
+            {
+                ((IDisposable)_transferManger).Dispose();
+            }
+
             return 0;
         }
-
+       
         private void OnFileChange(object source, FileSystemEventArgs e)
         {
             // Specify what is done when a file is changed, created, or deleted.
