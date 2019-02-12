@@ -8,3 +8,11 @@
 /src/FolderWatch2BlobStorage.Tests/bin/Debug/netcoreapp2.1
 /src/FolderWatch2BlobStorage/obj
 /src/FolderWatch2BlobStorage.Tests/obj
+/.vscode
+/src/.vs
+/src/FolderWatch2BlobStorage/bin/Debug/netstandard2.0
+/src/FolderWatch2BlobStorage.Console/.vs/FolderWatch2BlobStorage.UI
+/src/FolderWatch2BlobStorage.Console/bin/Debug
+/src/FolderWatch2BlobStorage.Console/obj
+/src/FolderWatch2BlobStorage.Tests/bin
+/TestDemoResponseFile.txt

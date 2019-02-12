@@ -2,9 +2,6 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 // This is sample code and not meant to be used in a production environment.
 
-using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Blob;
-using Microsoft.WindowsAzure.Storage.RetryPolicies;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,65 +9,79 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Blob;
+using Microsoft.WindowsAzure.Storage.RetryPolicies;
+using System.Collections.Concurrent;
+using System.Threading;
 
 namespace FolderWatch2BlobStorage
 {
-    internal class TranferManager : ITranferManager
+    public class TranferManager : ITranferManager, IDisposable
     {
-        private static readonly Queue<string> _transferQueue = new Queue<string>();
+        private static readonly BlockingCollection<FileInfo> _transferQueue = new BlockingCollection<FileInfo>();
 
-        public string AccountName { get; set; }
+        private string AccountName { get; set; }
 
-        public string AccountKey { get; set; }
+        private string AccountKey { get; set; }
 
-        public string ContainerName { get; set; }
+        private string ContainerName { get; set; }
 
-        public TranferManager(string accountName, string accountKey, string containerName)
+        private readonly ILogger _logger;
+        private readonly Thread _outputThread;
+
+        public TranferManager(ILogger logger, string accountName, string accountKey, string containerName) 
         {
+            _logger = logger;
             AccountName = accountName;
             AccountKey = accountKey;
             ContainerName = containerName;
+
+            // Start Transfer queue processor
+            _outputThread = new Thread(ProcessTransferQueueAsync)
+            {
+                IsBackground = true,
+                Name = "File Transfer queue processing thread"
+            };
+            _outputThread.Start();
         }
 
-        public async Task UploadFileAsync(string filePath)
+        public virtual void UploadFile(FileInfo filePath)
         {
-
-            if (_transferQueue.Contains(filePath) == false)
+            if (!_transferQueue.IsAddingCompleted)
             {
-                _transferQueue.Enqueue(filePath);
+                try
+                {
+                    _transferQueue.Add(filePath);
+                    return;
+                }
+                catch (InvalidOperationException) { }
             }
 
-            string file = string.Empty;
+            _logger.LogInformation($"Current Queue Length is {_transferQueue.Count}");
+        }
 
-            if (_transferQueue.TryDequeue(out file) && !string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+        public void Dispose()
+        {
+            _transferQueue.CompleteAdding();
+
+            try
             {
-                Console.WriteLine($"Transfering file: \t {file}");
-
-                FileSize transferType = await CalculcateFileSize(file);
-                if (transferType == FileSize.Small)
-                {
-                    await UploadSmallFileAsync(file);
-                }
-                else
-                {
-                    await UploadLargeFileAsync(file);
-                }
-
+                _outputThread.Join(1500); 
             }
-
-            Console.WriteLine($"Current Queue Length is {_transferQueue.Count}");
-
+            catch (ThreadStateException) { }
         }
 
         /// <summary>
-        /// Upload Files less than 1 MB
+        /// Designed to transfer a file that is less than 1 MB to BLOB storage.
         /// </summary>
         /// <remarks>
         /// </remarks>
-        internal async Task UploadSmallFileAsync(string fileName)
+        internal virtual async Task UploadSmallFileAsync(string fileName)
         {
             var blobStorageDirectoryName = fileName.Substring(Path.GetPathRoot(fileName).Length);
-            
+
             CloudBlobClient cloudBlobClient = CreateBlobClient(AccountName, AccountKey);
 
             var cloudBlobContainerWithPolicy = cloudBlobClient.GetContainerReference(ContainerName);
@@ -98,12 +109,12 @@ namespace FolderWatch2BlobStorage
         }
 
         /// <summary>
-        /// 
+        /// Designed to transfer a file that is greater than 1 MB to BLOB storage.
         /// </summary>
         /// <remarks>
         /// based off https://www.red-gate.com/simple-talk/cloud/platform-as-a-service/azure-blob-storage-part-3-using-the-storage-client-library/
         /// </remarks>
-        internal async Task UploadLargeFileAsync(string fileName)
+        internal virtual async Task UploadLargeFileAsync(string fileName)
         {
             CloudBlobClient cloudBlobClient = CreateBlobClient(AccountName, AccountKey);
 
@@ -111,7 +122,7 @@ namespace FolderWatch2BlobStorage
 
             //just in case, check to see if the container exists, and create it if it doesn't
             await cloudBlobContainer.CreateIfNotExistsAsync();
-
+            
             var blobStorageDirectoryName = fileName.Substring(Path.GetPathRoot(fileName).Length);
 
             CloudBlockBlob blob = cloudBlobContainer.GetBlockBlobReference(blobStorageDirectoryName);
@@ -183,11 +194,11 @@ namespace FolderWatch2BlobStorage
             }
         }
 
-        internal async Task<FileSize> CalculcateFileSize(string filePath)
+        internal async Task<FileSize> CalculcateFileSize(FileInfo filePath)
         {
             return await Task.Run(() =>
             {
-                long length = new FileInfo(filePath).Length;
+                long length = filePath.Length;
 
                 if (length <= (1024 * 1024)) // 1 MB
                 {
@@ -196,7 +207,42 @@ namespace FolderWatch2BlobStorage
 
                 return FileSize.Large;
             });
-        }        
+        }
+
+        internal virtual async Task TransferFile(FileInfo file)
+        {
+            _logger.Log(Microsoft.Extensions.Logging.LogLevel.Information, $"Transfering file: \t {file}");
+            FileSize transferType = await CalculcateFileSize(file);
+            if (transferType == FileSize.Small)
+            {
+                await UploadSmallFileAsync(file.FullName);
+            }
+            else
+            {
+                await UploadLargeFileAsync(file.FullName);
+            }
+
+        }
+
+        private async void ProcessTransferQueueAsync()
+        {
+            try
+            {
+                foreach (var file in _transferQueue.GetConsumingEnumerable())
+                {
+
+                    await TransferFile(file);
+                }
+            }
+            catch
+            {
+                try
+                {
+                    _transferQueue.CompleteAdding();
+                }
+                catch { }
+            }
+        }
 
         private CloudBlobClient CreateBlobClient(string accountName, string accountKey)
         {
@@ -212,6 +258,6 @@ namespace FolderWatch2BlobStorage
             byte[] blockHash = md5.ComputeHash(data);
             return Convert.ToBase64String(blockHash, 0, 16);
         }
-        
+
     }
 }

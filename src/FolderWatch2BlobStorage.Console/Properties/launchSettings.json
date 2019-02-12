@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "FolderWatch2BlobStorage": {
+      "commandName": "Project",
+      "commandLineArgs": "--accountname \"transferhelper\" --accountkey \"ZydHH1lcoj6zfLmaTNMzqMI1mFe7tV+FV3ImTTibunu93XSEpiyh4FZ8Bwa8Kh36006AjF9GOh4TVdLBZg14qg==\" --containername \"mycontainername\" --directory \"c:\\temp\" --include --loglevel:5"
+    }
+  }
+}
