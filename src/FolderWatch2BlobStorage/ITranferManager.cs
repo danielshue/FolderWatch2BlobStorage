@@ -9,6 +9,6 @@ namespace FolderWatch2BlobStorage
 {
     public interface ITranferManager
     {
-        void UploadFile(FileInfo filePath);
+        void UploadFile(string filePath);
     }
 }

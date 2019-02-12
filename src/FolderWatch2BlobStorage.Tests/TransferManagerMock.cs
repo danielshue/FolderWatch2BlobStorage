@@ -3,15 +3,13 @@
 // This is sample code and not meant to be used in a production environment.
 
 using System;
-using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace FolderWatch2BlobStorage.Tests
 {
     internal class TransferManagerMock : ITranferManager
     {
-        public void UploadFile(FileInfo filePath)
+        public void UploadFile(string filePath)
         {
             Console.WriteLine($"Transfering File: {filePath}");
             Thread.Sleep(TimeSpan.FromSeconds(5));

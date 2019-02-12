@@ -7,7 +7,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -122,9 +121,7 @@ namespace FolderWatch2BlobStorage
             // Specify what is done when a file is changed, created, or deleted.
             _logger.LogInformation($"Detect File {e.ChangeType}: {e.FullPath}");
 
-            var file = new FileInfo(e.FullPath);
-
-            _transferManger.UploadFile(file);
+            _transferManger.UploadFile(e.FullPath);
         }
     }
 }

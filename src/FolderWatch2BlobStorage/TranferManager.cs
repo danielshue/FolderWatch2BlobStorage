@@ -20,7 +20,7 @@ namespace FolderWatch2BlobStorage
 {
     public class TranferManager : ITranferManager, IDisposable
     {
-        private static readonly BlockingCollection<FileInfo> _transferQueue = new BlockingCollection<FileInfo>();
+        private static readonly BlockingCollection<string> _transferQueue = new BlockingCollection<string>();
 
         private string AccountName { get; set; }
 
@@ -47,19 +47,20 @@ namespace FolderWatch2BlobStorage
             _outputThread.Start();
         }
 
-        public virtual void UploadFile(FileInfo filePath)
+        public virtual void UploadFile(string filePath)
         {
             if (!_transferQueue.IsAddingCompleted)
             {
                 try
                 {
                     _transferQueue.Add(filePath);
+
+                    _logger.LogInformation($"Current Queue Length is {_transferQueue.Count}");
+
                     return;
                 }
                 catch (InvalidOperationException) { }
             }
-
-            _logger.LogInformation($"Current Queue Length is {_transferQueue.Count}");
         }
 
         public void Dispose()
@@ -194,11 +195,13 @@ namespace FolderWatch2BlobStorage
             }
         }
 
-        internal async Task<FileSize> CalculcateFileSize(FileInfo filePath)
+        internal async Task<FileSize> CalculcateFileSize(string filePath)
         {
             return await Task.Run(() =>
             {
-                long length = filePath.Length;
+                var file = new FileInfo(filePath);
+
+                long length = file.Length;
 
                 if (length <= (1024 * 1024)) // 1 MB
                 {
@@ -209,19 +212,23 @@ namespace FolderWatch2BlobStorage
             });
         }
 
-        internal virtual async Task TransferFile(FileInfo file)
+        internal virtual async Task TransferFile(string filePath)
         {
-            _logger.Log(Microsoft.Extensions.Logging.LogLevel.Information, $"Transfering file: \t {file}");
-            FileSize transferType = await CalculcateFileSize(file);
-            if (transferType == FileSize.Small)
+            if( !string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
             {
-                await UploadSmallFileAsync(file.FullName);
-            }
-            else
-            {
-                await UploadLargeFileAsync(file.FullName);
-            }
+                _logger.Log(Microsoft.Extensions.Logging.LogLevel.Information, $"Transfering file: \t {filePath}");
 
+                FileSize transferType = await CalculcateFileSize(filePath);
+
+                if (transferType == FileSize.Small)
+                {
+                    await UploadSmallFileAsync(filePath);
+                }
+                else if (transferType == FileSize.Large)
+                {
+                    await UploadLargeFileAsync(filePath);
+                }
+            }
         }
 
         private async void ProcessTransferQueueAsync()
