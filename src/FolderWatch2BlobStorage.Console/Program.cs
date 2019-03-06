@@ -8,7 +8,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using McMaster.Extensions.CommandLineUtils;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

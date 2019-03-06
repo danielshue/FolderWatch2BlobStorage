@@ -4,7 +4,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -15,6 +14,7 @@ using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.RetryPolicies;
 using System.Collections.Concurrent;
 using System.Threading;
+using System.Collections.ObjectModel;
 
 namespace FolderWatch2BlobStorage
 {
@@ -29,10 +29,16 @@ namespace FolderWatch2BlobStorage
         private string ContainerName { get; set; }
 
         private readonly ILogger _logger;
+
         private readonly Thread _outputThread;
 
-        public TranferManager(ILogger logger, string accountName, string accountKey, string containerName) 
+        public IEnumerable<FileDetails> TransferHistory { get { return _transferHistory; } }
+
+        private ObservableCollection<FileDetails> _transferHistory;
+
+        public TranferManager(ILogger logger, string accountName, string accountKey, string containerName)
         {
+            _transferHistory = new ObservableCollection<FileDetails>();
             _logger = logger;
             AccountName = accountName;
             AccountKey = accountKey;
@@ -69,7 +75,7 @@ namespace FolderWatch2BlobStorage
 
             try
             {
-                _outputThread.Join(1500); 
+                _outputThread.Join(1500);
             }
             catch (ThreadStateException) { }
         }
@@ -77,11 +83,11 @@ namespace FolderWatch2BlobStorage
         /// <summary>
         /// Designed to transfer a file that is less than 1 MB to BLOB storage.
         /// </summary>
-        /// <remarks>
-        /// </remarks>
-        internal virtual async Task UploadSmallFileAsync(string fileName)
+        internal virtual async Task UploadSmallFileAsync(string filePath)
         {
-            var blobStorageDirectoryName = fileName.Substring(Path.GetPathRoot(fileName).Length);
+            var fileDetails = CreateFileDetails(filePath);
+
+            var blobStorageDirectoryName = fileDetails.DestinationPath;
 
             CloudBlobClient cloudBlobClient = CreateBlobClient(AccountName, AccountKey);
 
@@ -105,7 +111,11 @@ namespace FolderWatch2BlobStorage
 
             blob.StreamWriteSizeInBytes = 256 * 1024; //256 k
 
-            await blob.UploadFromFileAsync(fileName);
+            fileDetails.StartTransferTime = DateTime.Now;
+
+            await blob.UploadFromFileAsync(filePath);
+
+            EndFileTransfer(fileDetails);
 
         }
 
@@ -115,22 +125,24 @@ namespace FolderWatch2BlobStorage
         /// <remarks>
         /// based off https://www.red-gate.com/simple-talk/cloud/platform-as-a-service/azure-blob-storage-part-3-using-the-storage-client-library/
         /// </remarks>
-        internal virtual async Task UploadLargeFileAsync(string fileName)
+        internal virtual async Task UploadLargeFileAsync(string filePath)
         {
+            var fileDetails = CreateFileDetails(filePath);
+
             CloudBlobClient cloudBlobClient = CreateBlobClient(AccountName, AccountKey);
 
             var cloudBlobContainer = cloudBlobClient.GetContainerReference(ContainerName);
 
             //just in case, check to see if the container exists, and create it if it doesn't
             await cloudBlobContainer.CreateIfNotExistsAsync();
-            
-            var blobStorageDirectoryName = fileName.Substring(Path.GetPathRoot(fileName).Length);
+
+            var blobStorageDirectoryName = filePath.Substring(Path.GetPathRoot(filePath).Length);
 
             CloudBlockBlob blob = cloudBlobContainer.GetBlockBlobReference(blobStorageDirectoryName);
 
             int blockSize = 256 * 1024; //256 kb
 
-            using (FileStream fileStream = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (FileStream fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             {
                 long fileSize = fileStream.Length;
 
@@ -147,6 +159,8 @@ namespace FolderWatch2BlobStorage
                 {
                     int bytesRead = 0; //number of bytes read so far
                     long bytesLeft = fileSize; //number of bytes left to read and upload
+
+                    fileDetails.StartTransferTime = DateTime.Now;
 
                     //do until all of the bytes are uploaded
                     while (bytesLeft > 0)
@@ -187,10 +201,11 @@ namespace FolderWatch2BlobStorage
                     //commit the blocks
                     await blob.PutBlockListAsync(blockIDs);
 
+                    EndFileTransfer(fileDetails);
                 }
                 catch (Exception ex)
                 {
-                    Debug.Print("Exception thrown = {0}", ex);
+                    _logger.LogError(ex, "Exception thrown = {0}");
                 }
             }
         }
@@ -214,7 +229,7 @@ namespace FolderWatch2BlobStorage
 
         internal virtual async Task TransferFile(string filePath)
         {
-            if( !string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+            if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
             {
                 _logger.Log(Microsoft.Extensions.Logging.LogLevel.Information, $"Transfering file: \t {filePath}");
 
@@ -229,6 +244,15 @@ namespace FolderWatch2BlobStorage
                     await UploadLargeFileAsync(filePath);
                 }
             }
+        }
+
+        private void EndFileTransfer(FileDetails fileDetails)
+        {
+            fileDetails.EndTransferTime = DateTime.Now;
+
+            _transferHistory.Add(fileDetails);
+
+            _logger.LogInformation($"End File Transfer: Start Time: {fileDetails.StartTransferTime} | End Time: {fileDetails.EndTransferTime} {fileDetails.DestinationPath}");
         }
 
         private async void ProcessTransferQueueAsync()
@@ -250,6 +274,7 @@ namespace FolderWatch2BlobStorage
                 catch { }
             }
         }
+
         private CloudBlobClient CreateBlobClient(string accountName, string accountKey)
         {
             string connectionString = $"DefaultEndpointsProtocol=https;AccountName={accountName};AccountKey={accountKey}";
@@ -263,6 +288,21 @@ namespace FolderWatch2BlobStorage
             MD5 md5 = new MD5CryptoServiceProvider();
             byte[] blockHash = md5.ComputeHash(data);
             return Convert.ToBase64String(blockHash, 0, 16);
+        }
+
+        private FileDetails CreateFileDetails(string filePath)
+        {
+            var fileInfo = new FileInfo(filePath);
+
+            var fileDetails = new FileDetails
+            {
+                FileName = filePath,
+                LocalFilePath = fileInfo.DirectoryName,
+                Size = fileInfo.Length,
+                DestinationPath = filePath.Substring(Path.GetPathRoot(filePath).Length),
+            };
+
+            return fileDetails;
         }
 
     }
