@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>FolderWatch2BlobStorageLib</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

@@ -17,3 +17,5 @@
 /src/FolderWatch2BlobStorage.Tests/bin
 /TestDemoResponseFile.txt
 /src/FolderWatch2BlobStorage.UI
+/src/FolderWatch2BlobStorage.Console/bin/Release/netcoreapp3.0
+/src/FolderWatch2BlobStorage/bin

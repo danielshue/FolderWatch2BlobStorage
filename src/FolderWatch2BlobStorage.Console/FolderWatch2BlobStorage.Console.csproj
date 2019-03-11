@@ -4,7 +4,10 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <ApplicationIcon />
-    <StartupObject />
+    <StartupObject>FolderWatch2BlobStorage.TransferToStorage</StartupObject>
+    <AssemblyName>FolderWatch2BlobStorage</AssemblyName>
+    <Company>Microsoft</Company>
+    <Authors>Dan Shue</Authors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="ILLink.Tasks" Version="0.1.5-preview-1841731" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="2.3.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="2.2.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="2.2.0" />
